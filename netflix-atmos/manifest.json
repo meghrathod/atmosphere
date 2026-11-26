@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Atmosphere",
   "version": "0.4.0",
-  "description": "Dolby Atmos for Netflix and Disney+ in Safari: requests Atmos audio (and 4K/HDR on Disney+) and switches Safari into Atmos mode.",
+  "description": "Dolby audio in Safari: Atmos on Netflix and Disney+ (plus 4K/HDR on Disney+), Dolby 5.1 on YouTube, and switches Safari into Atmos mode.",
   "content_scripts": [
     {
       "matches": [
@@ -20,7 +20,17 @@
       ],
       "js": [
         "video-track.js",
-        "disney-content.js"
+        "site-content.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "video-track.js",
+        "site-content.js"
       ],
       "run_at": "document_start"
     }
@@ -44,6 +54,16 @@
       ],
       "matches": [
         "https://*.disneyplus.com/*"
+      ]
+    },
+    {
+      "resources": [
+        "dec3.js",
+        "youtube-page.js",
+        "prime.mp4"
+      ],
+      "matches": [
+        "https://www.youtube.com/*"
       ]
     }
   ],

@@ -1,8 +1,10 @@
-// Isolated-world content script on disneyplus.com.
-// - Injects dec3.js and disney-page.js (request/playlist changes, diagnostics) into the page,
-//   passing settings through <html> data attributes.
+// Isolated-world content script on disneyplus.com and youtube.com.
+// - Injects dec3.js and the site's page script (disney-page.js / youtube-page.js) into the
+//   page, passing settings through <html> data attributes.
 // - Primes Safari's Dolby Atmos output mode before playback (WebKit bug 331672).
 // - Tracks status from the page and answers the toolbar popup.
+const SITE = /(^|\.)youtube\.com$/.test(location.hostname) ? 'youtube' : 'disney';
+const SITE_NAME = SITE === 'youtube' ? 'YouTube' : 'Disney+';
 const DEFAULTS = { requestAtmos: true, prime: true, debug: false, disneyQuality: 'max', disneyRange: 'dv' };
 // Extension storage is async, but Disney+ fetches its stream list right at page load.
 // Cache settings in the page's localStorage so they're available synchronously at start.
@@ -12,7 +14,7 @@ try { settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(CACHE_KEY) ||
 const cacheSettings = () => { try { localStorage.setItem(CACHE_KEY, JSON.stringify(settings)); } catch (e) { /* ignore */ } };
 
 const state = {
-  site: 'disney',
+  site: SITE,
   hooks: false,
   requested: false,    // Atmos/4K/HDR added to Disney+'s playback request
   playing: null,       // header of the audio stream currently loaded
@@ -38,7 +40,7 @@ const settingsReady = browser.storage.local.get(DEFAULTS).then((s) => {
   cacheSettings();
   if (!settings.prime) state.primed = 'off';
   if (settings.debug) {
-    console.info('[Atmosphere/Disney+] Diagnostics active on ' + location.hostname);
+    console.info(`[Atmosphere/${SITE_NAME}] Diagnostics active on ${location.hostname}`);
     log('page', 'Diagnostics active on ' + location.hostname + location.pathname);
   }
 }).catch(() => {});
@@ -48,13 +50,57 @@ browser.storage.onChanged.addListener((changes) => {
   cacheSettings();
 });
 
-for (const file of ['dec3.js', 'disney-page.js']) {
-  const s = document.createElement('script');
-  s.src = browser.runtime.getURL(file);
-  s.async = false;
-  (document.head || document.documentElement).appendChild(s);
-  s.onload = () => s.remove();
+// Page scripts. Disney+: a plain <script src> to the extension file.
+// YouTube: its CSP only runs scripts carrying the page's nonce ('strict-dynamic'), and Safari
+// silently drops an extension <script src> there. So read the code and inject it inline with
+// the nonce of YouTube's first script. YouTube also enforces Trusted Types, so the code goes
+// through a policy.
+const scriptPolicy = (() => {
+  try { return window.trustedTypes ? trustedTypes.createPolicy('atmosphere', { createScriptURL: (u) => u, createScript: (c) => c }) : null; } catch (e) { return null; }
+})();
+const PAGE_FILES = ['dec3.js', SITE + '-page.js'];
+function injectSrc() {
+  for (const file of PAGE_FILES) {
+    try {
+      const s = document.createElement('script');
+      const url = browser.runtime.getURL(file);
+      s.src = scriptPolicy ? scriptPolicy.createScriptURL(url) : url;
+      s.async = false;
+      s.onload = () => s.remove();
+      s.onerror = () => log('page', `Couldn't load ${file} into the page`);
+      (document.head || document.documentElement).appendChild(s);
+    } catch (e) {
+      log('page', `Couldn't inject ${file}`, `${e.name}: ${e.message}`);
+    }
+  }
 }
+function pageNonce() {
+  const find = () => { for (const el of document.querySelectorAll('script')) if (el.nonce) return el.nonce; return ''; };
+  const now = find();
+  if (now) return Promise.resolve(now);
+  return new Promise((resolve) => {
+    const obs = new MutationObserver(() => { const n = find(); if (n) { obs.disconnect(); resolve(n); } });
+    obs.observe(document, { childList: true, subtree: true });
+    setTimeout(() => { obs.disconnect(); resolve(''); }, 5000);
+  });
+}
+async function injectInline() {
+  try {
+    const [code, nonce] = await Promise.all([
+      Promise.all(PAGE_FILES.map((f) => fetch(browser.runtime.getURL(f)).then((r) => r.text()))).then((c) => c.join('\n;\n')),
+      pageNonce(),
+    ]);
+    const s = document.createElement('script');
+    if (nonce) s.nonce = nonce;
+    s.textContent = scriptPolicy ? scriptPolicy.createScript(code) : code;
+    (document.head || document.documentElement).appendChild(s);
+    s.remove();
+    log('page', `Injected page hooks inline (${nonce ? 'with' : 'without'} page nonce): ${document.documentElement.dataset.atmosHooks || 'not running'}`);
+  } catch (e) {
+    log('page', "Couldn't inject page hooks", `${e.name}: ${e.message}`);
+  }
+}
+if (SITE === 'youtube') injectInline(); else injectSrc();
 
 // Logs: kept only in Debug mode, shown in the popup and forwarded to the local log sink.
 function log(kind, msg, text) {
@@ -63,7 +109,7 @@ function log(kind, msg, text) {
   if (last && last.kind === kind && last.msg === msg) { last.count = (last.count || 1) + 1; last.t = Date.now(); return; }
   logs.push({ t: Date.now(), kind, msg, data: text || null, count: 1 });
   if (logs.length > 200) logs.shift();
-  try { browser.runtime.sendMessage({ atmosLog: { site: 'disney', kind, msg, text: text ? String(text).slice(0, 4000) : '' } }); } catch (e) { /* ignore */ }
+  try { browser.runtime.sendMessage({ atmosLog: { site: SITE, kind, msg, text: text ? String(text).slice(0, 4000) : '' } }); } catch (e) { /* ignore */ }
 }
 
 const describe = (p) => (p.label || '') + (p.dataRateKbps ? ` ${p.dataRateKbps} kbps` : '');
@@ -93,7 +139,7 @@ function isPlaying() {
   return [...document.querySelectorAll('video')].some((v) => !v.paused && !v.ended && v.readyState > 2);
 }
 
-// Atmos priming (WebKit bug 331672): Disney+ plays through MSE, which Safari renders as
+// Atmos priming (WebKit bug 331672): Disney+ and YouTube play through MSE, which Safari renders as
 // Multichannel unless an Atmos file has played via a plain media element first. Safari
 // keeps the mode an audio stream started in, so this must run before playback starts.
 const SOURCES = [
@@ -137,7 +183,7 @@ for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => p
 // Popup API
 browser.runtime.onMessage.addListener((m) => {
   if (!m || !m.dolby) return;
-  if (m.dolby === 'get') return Promise.resolve({ site: 'disney', state: { ...state, active: isPlaying(), video: video.snapshot() }, logs, settings });
+  if (m.dolby === 'get') return Promise.resolve({ site: SITE, state: { ...state, active: isPlaying(), video: video.snapshot() }, logs, settings });
   if (m.dolby === 'prime') return primeAtmos('popup', true).then((r) => ({ primed: r }));
   if (m.dolby === 'clear') { logs.length = 0; return Promise.resolve({ ok: true }); }
   if (m.dolby === 'settings') {

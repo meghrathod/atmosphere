@@ -1,4 +1,4 @@
-// Atmosphere popup. Shows live status from the active Netflix / Disney+ tab.
+// Atmosphere popup. Shows live status from the active Netflix / Disney+ / YouTube tab.
 // Opened outside Safari (no extension API) it renders demo data: popup.html?site=disney
 const api = globalThis.browser;
 const $ = (id) => document.getElementById(id);
@@ -42,14 +42,15 @@ async function send(msg) {
 
 // ---------- site theming ----------
 const SITES = {
-  netflix: { name: 'Netflix', theme: '', desc: 'Request Atmos' },
-  disney: { name: 'Disney+', theme: 'theme-disney', desc: 'Request Atmos, 4K and HDR' },
+  netflix: { name: 'Netflix', theme: '', toggle: 'Dolby Atmos', desc: 'Request Atmos' },
+  disney: { name: 'Disney+', theme: 'theme-disney', toggle: 'Dolby Atmos', desc: 'Request Atmos, 4K and HDR' },
+  youtube: { name: 'YouTube', theme: 'theme-youtube', toggle: 'Dolby 5.1', desc: 'Use Dolby surround when a video has it' },
 };
 function applySite(site) {
   const s = SITES[site];
   document.body.className = s ? s.theme : '';
   $('site').textContent = s ? s.name : '';
-  if (s) $('requestDesc').textContent = s.desc;
+  if (s) { $('requestDesc').textContent = s.desc; $('requestName').textContent = s.toggle; }
   $('disneySettings').hidden = site !== 'disney';
 }
 
@@ -90,7 +91,7 @@ function videoChips(v) {
 function audioChips(p) {
   if (!p || p.tentative) return [];
   if (p.jocFlag) return [logoChip('atmos', 'dolby-atmos.svg', 'Dolby Atmos', () => chip('atmos', 'ATMOS', DOME))];
-  if (p.channels >= 6) return [chip('', '5.1')];
+  if (p.channels >= 6) return [chip('', ({ eac3: 'DD+ 5.1', ac3: 'DD 5.1' })[p.codec] || '5.1')];
   if (p.channels) return [chip('', 'STEREO')];
   return [];
 }
@@ -132,7 +133,7 @@ function render({ site = 'netflix', state, logs, settings }) {
   // Audio row
   if (!p) setRow('row-audio', '', live ? 'Waiting for audio…' : 'Nothing playing');
   else if (p.tentative && p.codec === 'eac3') setRow('row-audio', '', 'Dolby Digital Plus · checking…');
-  else setRow('row-audio', atmos ? 'ok' : 'warn', p.label || 'Unknown', () => audioChips(p), JSON.stringify([p.jocFlag, p.channels]));
+  else setRow('row-audio', atmos || (site === 'youtube' && /^(ac3|eac3)$/.test(p.codec)) ? 'ok' : 'warn', p.label || 'Unknown', () => audioChips(p), JSON.stringify([p.jocFlag, p.channels]));
 
   // Video row
   const videoText = v.height ? [v.label, v.range && v.range !== 'SDR' ? v.range : ''].filter(Boolean).join(' ') : '';
@@ -153,7 +154,7 @@ function renderStats(site, state, settings) {
   const sep = () => rows.push(null);
 
   if (state.offline) add('Status', 'not connected: reload the page');
-  add('Request', state.requested ? 'Atmos added' : settings.requestAtmos ? 'waiting for a title' : 'off');
+  add('Request', state.requested ? (site === 'youtube' ? 'Dolby 5.1 enabled' : 'Atmos added') : settings.requestAtmos ? (site === 'youtube' ? 'waiting for a video' : 'waiting for a title') : 'off');
   sep();
   if (p) {
     add('Audio', p.label);
@@ -204,13 +205,14 @@ function renderLogs(logs) {
   if (atBottom) ul.scrollTop = ul.scrollHeight;
 }
 
-// Couldn't reach the tab's content script. On Netflix/Disney+ that happens when the page was
+// Couldn't reach the tab's content script. On a supported site that happens when the page was
 // open before Atmosphere was installed or updated; show the normal view (settings still work)
 // with a reload hint. On other websites, show only the brand and one line.
 async function showOffline() {
   const tab = await activeTab();
   const url = (tab && tab.url) || '';
-  const site = /^https:\/\/www\.netflix\.com\//.test(url) ? 'netflix' : /^https:\/\/([a-z0-9-]+\.)*disneyplus\.com\//.test(url) ? 'disney' : null;
+  const site = /^https:\/\/www\.netflix\.com\//.test(url) ? 'netflix' : /^https:\/\/([a-z0-9-]+\.)*disneyplus\.com\//.test(url) ? 'disney'
+    : /^https:\/\/www\.youtube\.com\//.test(url) ? 'youtube' : null;
   if (site) {
     let settings = DEFAULTS;
     if (api) { try { settings = await api.storage.local.get(DEFAULTS); } catch { /* ignore */ } }
@@ -219,7 +221,7 @@ async function showOffline() {
   }
   applySite(null);
   document.body.classList.add('idle');
-  $('subline').textContent = 'Open Netflix or Disney+ to start';
+  $('subline').textContent = 'Open Netflix, Disney+ or YouTube to start';
 }
 
 async function refresh() {

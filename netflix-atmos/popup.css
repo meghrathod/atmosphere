@@ -26,6 +26,9 @@
 /* Disney+ accent */
 body.theme-disney { --accent: #1f6fd6; }
 @media (prefers-color-scheme: dark) { body.theme-disney { --accent: #5cb2ff; } }
+/* YouTube accent */
+body.theme-youtube { --accent: #e0261b; }
+@media (prefers-color-scheme: dark) { body.theme-youtube { --accent: #ff5a4f; } }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }

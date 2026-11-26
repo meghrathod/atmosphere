@@ -2,7 +2,7 @@
 
 # Atmosphere
 
-A Safari extension for macOS that gets **Netflix** and **Disney+** to play **Dolby Atmos** in Safari. On Disney+ it also unlocks **up to 4K** and **Dolby Vision / HDR10**.
+A Safari extension for macOS that gets **Netflix** and **Disney+** to play **Dolby Atmos** in Safari. On Disney+ it also unlocks **up to 4K** and **Dolby Vision / HDR10**. On **YouTube**, it enables **Dolby Digital Plus 5.1** on videos that offer it.
 
 > **Vibecoded.** I built this in one session with Claude (Claude Code): the debugging, the extension, the icon and this README. I tested it on my own Mac and it works there, but expect rough edges.
 
@@ -24,13 +24,19 @@ Disney+'s web player in Safari asks for AAC stereo and at most 720p, so Disney+ 
 3. **Applies your Quality setting** to the stream list before the player sees it. *Highest* (default) keeps only the title's top resolution, so 4K starts within seconds instead of the player climbing from 480p.
 4. **Primes Safari's Atmos mode** at page start, the same workaround as Netflix.
 
-### Both
+### YouTube
+
+Turn on **Dolby 5.1** in the Atmosphere popup and play a video with a Dolby surround track. Atmosphere enables YouTube's multichannel audio selection and reports the stream Safari opens.
+
+On the [YouTube surround test video](https://www.youtube.com/watch?v=iTHtXgnhqfM), the popup reported **DD+ 5.1** at **1080p**, and macOS reported **Multichannel**. YouTube support is for 5.1 surround. Netflix and Disney+ can also play Dolby Atmos on supported titles.
+
+### Playback status
 
 Atmosphere doesn't touch DRM or decrypt anything. It only adjusts the player's requests and stream list, and reads stream headers (codec, channels, Atmos flag) to show its status.
 
-The toolbar popup adapts to the site (purple for Netflix, blue for Disney+) and shows:
-- whether Atmos was requested,
-- the audio playing (Atmos, DD+ 5.1 or AAC stereo, with bitrate) and any mid-playback changes,
+The toolbar popup adapts to the site (purple for Netflix, blue for Disney+, and red for YouTube) and shows:
+- whether enhanced audio was requested,
+- the audio playing (Atmos, DD+ 5.1 or AAC stereo, with bitrate when available) and any mid-playback changes,
 - the video playing (resolution, Dolby Vision / HDR10 / SDR, codec, dropped frames) and quality changes,
 - whether Safari is in Atmos mode.
 
@@ -56,7 +62,7 @@ cp -R build/Build/Products/Release/Atmosphere.app ~/Applications/
 open ~/Applications/Atmosphere.app
 ```
 
-A free Apple ID works for signing: add it in Xcode → Settings → Accounts, and use its "Personal Team" ID. Then turn on **Atmosphere** in Safari → Settings → Extensions and allow it on netflix.com.
+A free Apple ID works for signing: add it in Xcode → Settings → Accounts, and use its "Personal Team" ID. Then turn on **Atmosphere** in Safari → Settings → Extensions and allow it on the sites you use: netflix.com, disneyplus.com, and youtube.com.
 
 If you don't want to sign it, you can load it unsigned instead: turn on Safari → Settings → Developer → *Allow unsigned extensions*, then use *Add Temporary Extension…* and pick the `netflix-atmos` folder.
 
@@ -68,7 +74,9 @@ If you don't want to sign it, you can load it unsigned instead: turn on Safari �
 | `Atmosphere/` | Xcode wrapper app generated with `safari-web-extension-converter` |
 | `atmos-mse-test.html` | Test page: plays the Dolby clip directly, through MSE, and through MSE with video |
 | `atmos-probe.html` | Reports what Safari tells sites about Dolby audio support |
-| `netflix-atmos/disney-*.js` | Disney+ request/playlist changes, diagnostics, priming, status |
+| `netflix-atmos/disney-page.js` | Disney+ request and playlist handling |
+| `netflix-atmos/youtube-page.js` | YouTube multichannel support and stream detection |
+| `netflix-atmos/site-content.js` | Shared settings, priming, diagnostics, and popup status for Disney+ and YouTube |
 | `netflix-atmos/background.js` | Forwards Debug-mode logs to the local log receiver |
 | `tools/` | Icon generator, clip downloader, local log receiver |
 
@@ -90,7 +98,7 @@ python3 tools/log-server.py
 
 ## Trademarks
 
-Dolby, Dolby Atmos and Dolby Vision are trademarks of Dolby Laboratories. Netflix and Disney+ are trademarks of their respective owners. This project is not affiliated with or endorsed by them. The Dolby Atmos and Dolby Vision logos in `netflix-atmos/brand/` (from Wikimedia Commons) are used only to identify the audio and video formats being played.
+Dolby, Dolby Atmos and Dolby Vision are trademarks of Dolby Laboratories. Netflix, Disney+, and YouTube are trademarks of their respective owners. This project is not affiliated with or endorsed by them. The Dolby Atmos and Dolby Vision logos in `netflix-atmos/brand/` (from Wikimedia Commons) are used only to identify the audio and video formats being played.
 
 ## License
 
