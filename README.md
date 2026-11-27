@@ -4,7 +4,6 @@
 
 A Safari extension for macOS that gets **Netflix** and **Disney+** to play **Dolby Atmos** in Safari. On Disney+ it also unlocks **up to 4K** and **Dolby Vision / HDR10**. On **YouTube**, it enables **Dolby Digital Plus 5.1** on videos that offer it.
 
-> **Vibecoded.** I built this in one session with Claude (Claude Code): the debugging, the extension, the icon and this README. I tested it on my own Mac and it works there, but expect rough edges.
 
 ## What it does
 
